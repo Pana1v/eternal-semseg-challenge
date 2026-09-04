@@ -1,0 +1,28 @@
+image_width: 2048
+image_height: 1536
+camera_name: sensor/camera/windshield/nir
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [1780.16848, 0, 1028.30637, 0, 1789.0241, 774.98572, 0, 0, 1]
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [-0.14801, 0.11049, 0.00193, -5e-05, 0.06712]
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+projection_matrix:
+  rows: 3
+  cols: 4
+  data: [1780.16848, 0, 1028.30637, 0, 0, 1789.0241, 774.98572, 0, 0, 0, 1, 0]
+binning_x: 0
+binning_y: 0
+roi:
+  x_offset: 0
+  y_offset: 0
+  height: 0
+  width: 0
+  do_rectify: false

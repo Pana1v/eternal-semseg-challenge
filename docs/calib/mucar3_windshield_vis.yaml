@@ -1,0 +1,28 @@
+image_width: 2048
+image_height: 1536
+camera_name: sensor/camera/windshield/vis
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [1775.62133, 0, 1025.99113, 0, 1784.82927, 775.44415, 0, 0, 1]
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [-0.14196, 0.09598000000000001, 0.00212, -0.00044, -0.00044]
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+projection_matrix:
+  rows: 3
+  cols: 4
+  data: [1775.62133, 0, 1025.99113, 0, 0, 1784.82927, 775.44415, 0, 0, 0, 1, 0]
+binning_x: 0
+binning_y: 0
+roi:
+  x_offset: 0
+  y_offset: 0
+  height: 0
+  width: 0
+  do_rectify: false

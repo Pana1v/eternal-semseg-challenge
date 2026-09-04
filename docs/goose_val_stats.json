@@ -1,0 +1,79 @@
+{
+  "n_frames": 961,
+  "pixels": {
+    "other": 24726946,
+    "artificial_structures": 43328553,
+    "artificial_ground": 236283586,
+    "natural_ground": 482404028,
+    "obstacle": 70519481,
+    "vehicle": 21299426,
+    "vegetation": 831759987,
+    "human": 366397,
+    "sky": 257439596
+  },
+  "pixels_unlabeled": 0,
+  "points": {
+    "other": 428801,
+    "artificial_structures": 10027531,
+    "artificial_ground": 6914628,
+    "natural_ground": 41010488,
+    "obstacle": 6295525,
+    "vehicle": 2164255,
+    "vegetation": 107998096,
+    "human": 52483,
+    "sky": 0
+  },
+  "points_unlabeled": 0,
+  "points_by_range": {
+    "0-5m": {
+      "other": 322158,
+      "artificial_structures": 355217,
+      "artificial_ground": 126238,
+      "natural_ground": 740016,
+      "obstacle": 1077424,
+      "vehicle": 307107,
+      "vegetation": 9054699,
+      "human": 858,
+      "sky": 0
+    },
+    "5-15m": {
+      "other": 24916,
+      "artificial_structures": 2497398,
+      "artificial_ground": 1983494,
+      "natural_ground": 12313315,
+      "obstacle": 2598256,
+      "vehicle": 703709,
+      "vegetation": 37142895,
+      "human": 21923,
+      "sky": 0
+    },
+    "15-30m": {
+      "other": 42369,
+      "artificial_structures": 3270212,
+      "artificial_ground": 3455983,
+      "natural_ground": 15020861,
+      "obstacle": 1617228,
+      "vehicle": 795269,
+      "vegetation": 29190616,
+      "human": 19546,
+      "sky": 0
+    },
+    "30m+": {
+      "other": 39358,
+      "artificial_structures": 3904704,
+      "artificial_ground": 1348913,
+      "natural_ground": 12936296,
+      "obstacle": 1002617,
+      "vehicle": 358170,
+      "vegetation": 32609886,
+      "human": 10156,
+      "sky": 0
+    }
+  },
+  "range_totals": {
+    "0-5m": 11983717,
+    "5-15m": 57285906,
+    "15-30m": 53412084,
+    "30m+": 52210100
+  }
+}

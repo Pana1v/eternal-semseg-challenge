@@ -1,0 +1,94 @@
+name: Autograde submission
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch: {}
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    env:
+      # nothing here is pip installed and the modules import each other as
+      # packages ("from eval.metrics import ..."), so the repo root has to be
+      # on sys.path
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # scoring only reads a JSON of confusion matrices, so this is numpy (the IoU
+      # family), matplotlib (plots) and opencv-python-headless (the morphological
+      # gradient behind boundary IoU) and nothing else. No open3d, no scipy, and
+      # no torch: docker/runtime.Dockerfile is only for candidates producing a
+      # submission locally, and CI never builds it.
+      - name: Install scoring dependencies
+        run: python -m pip install --disable-pip-version-check numpy matplotlib opencv-python-headless
+
+      # A submission that is present but malformed SHOULD fail this job: that is
+      # load_submission raising FormatError with the offending field named, which
+      # is exactly the feedback a candidate wants before the deadline. Only an
+      # absent submission is a warning.
+      - name: Score committed submission
+        if: hashFiles('submission.json') != ''
+        run: |
+          python eval/score.py \
+            --submission submission.json \
+            --split score --method candidate \
+            --out-dir results | tee score_output.txt
+
+      - name: No submission found
+        if: hashFiles('submission.json') == ''
+        run: |
+          echo "::warning::No submission.json found at the repo root, nothing to score yet."
+
+      - name: Write score summary
+        if: always()
+        run: |
+          {
+            echo "## Eternal SemSeg Challenge: score split"
+            echo
+            if [ -f score_output.txt ]; then
+              echo '```'
+              cat score_output.txt
+              echo '```'
+              echo
+              echo "Compute is reported next to the score and never folded into it."
+            else
+              echo "_No submission scored yet. Commit \`submission.json\` at the repo root._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: score-results
+          path: results/
+          if-no-files-found: ignore
+
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The test suite exercises the whole repo, not just the scorer, so it needs
+      # what the modules actually import: scipy for the KD-tree and the distance
+      # transform, pillow for the fixture's png round trip, cv2 for boundary IoU.
+      # Still no open3d and no torch, because nothing in semseg/, eval/ or
+      # baselines/ imports either.
+      - name: Install test dependencies
+        run: |
+          python -m pip install --disable-pip-version-check \
+            numpy scipy opencv-python-headless pillow matplotlib pytest
+
+      - name: Run pytest
+        run: python -m pytest -q
