@@ -184,6 +184,57 @@ def test_newest_run_of_a_method_wins(tmp_path):
     assert runs["bl_paint"]["metrics"]["miou_3d"] == pytest.approx(0.90)
 
 
+def test_runs_from_different_splits_are_not_merged(tmp_path):
+    """A real results/ tree holds more than one split: run_all.sh scores the
+    fixture into it and the operator later scores goose into the same place.
+    Keying on method alone merges them, and _facts then labels the whole page
+    with the one split and frame count it finds on whichever run sorted first.
+    The result is a fixture number presented as a goose result, which is the
+    exact failure this repo refuses everywhere else.
+    """
+    write_run(tmp_path, "bl_paint", split="fixture", metrics={"miou_3d": 0.95})
+    write_run(tmp_path, "bl_geom3d", split="goose", metrics={"miou_3d": 0.19})
+
+    assert set(load_runs(str(tmp_path), split="goose")) == {"bl_geom3d"}
+    assert set(load_runs(str(tmp_path), split="fixture")) == {"bl_paint"}
+
+
+def test_declined_metric_does_not_warn_about_schema(tmp_path, capsys):
+    """A null miou_3d is the scorer declining a number it cannot compute, which
+    real GOOSE forces on the camera-only arm: no extrinsic ships, so there is
+    no 3D answer to give. The schema warning exists to catch score.py and this
+    file disagreeing about key names, and firing it on a correctly declined
+    value tells a candidate their submission is malformed when it is right.
+    """
+    payload = summary_payload("bl_cam2d")
+    payload["metrics_3d"]["miou"] = None
+    write_run(tmp_path, "bl_cam2d", payload=payload)
+
+    load_runs(str(tmp_path))
+
+    assert f"no {SORT_METRIC}" not in capsys.readouterr().err
+
+
+def test_page_reports_only_the_split_it_claims(tmp_path):
+    """The header asserts one split for the whole page, so the rows under it
+    have to come from that split and nothing else. With no --split the most
+    recently generated run decides, which is the goose one here because that
+    is the order an operator actually works in: fixture first from run_all.sh,
+    then real data.
+    """
+    write_run(tmp_path, "bl_paint", split="fixture", metrics={"miou_3d": 0.95})
+
+    later = summary_payload("bl_geom3d", split="goose", metrics={"miou_3d": 0.19})
+    later["generated_at"] = "2026-09-05T09:00:00"
+    write_run(tmp_path, "bl_geom3d", split="goose", payload=later)
+
+    page = render_to(tmp_path)
+
+    assert "split goose" in page
+    assert "split fixture" not in page
+    assert ">bl_paint<" not in page
+
+
 def leaderboard_row(page, method):
     """The one leaderboard row for `method`, tags stripped to its cells."""
     start = page.index(f">{method}<")

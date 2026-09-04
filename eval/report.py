@@ -146,6 +146,21 @@ def _dig(payload, path):
     return node
 
 
+def _path_present(payload, path):
+    """Whether every step of a dotted path exists, regardless of its value.
+
+    _dig cannot separate "key absent" from "key present and null", and the two
+    mean opposite things here: absent is a schema mismatch worth a warning,
+    null is the scorer correctly declining a metric it had no way to compute.
+    """
+    node = payload
+    for key in path.split("."):
+        if not isinstance(node, dict) or key not in node:
+            return False
+        node = node[key]
+    return True
+
+
 def _pick(payload, *paths):
     """First present value among `paths`. Absence is None, and a real 0.0 is
     kept, which is why this tests for None rather than for truthiness."""
@@ -232,18 +247,50 @@ def _warn_schema(method, summary_path, summary):
           f"top-level keys are [{keys}]", file=sys.stderr)
 
 
-def load_runs(results_dir: str):
-    """{method: run} for every scored run under `results_dir`.
+def load_runs(results_dir: str, split=None):
+    """{method: run} for every scored run of ONE split under `results_dir`.
 
     Run directories are named <split>_<method>_<timestamp>, so the sorted glob
     visits them oldest first and the newest scoring of a method wins.
+
+    One split, and not all of them, because the page states a single split and
+    frame count in its header and every row below inherits that claim. A real
+    results/ tree holds several: run_all.sh scores the fixture into it and an
+    operator later scores goose into the same place. Keyed on method alone
+    those merge, and a fixture row then sits under a goose heading wearing a
+    real result's label, which is the one thing this repo refuses to do
+    anywhere else.
+
+    `split` selects. Omitted, the most recently generated run's split wins and
+    the rest are dropped with a note naming what went, because silently
+    reporting on an arbitrary subset is worse than saying which one.
     """
     runs = {}
     pattern = os.path.join(results_dir, "*", "summary.json")
 
+    found = []
     for summary_path in sorted(glob.glob(pattern)):
         with open(summary_path) as f:
-            summary = json.load(f)
+            found.append((summary_path, json.load(f)))
+
+    if not found:
+        return runs
+
+    # generated_at and not the directory name: the glob sorts by name, which
+    # begins with the split, so the last entry is the last split alphabetically
+    # rather than the newest run.
+    if split is None:
+        _, newest = max(found, key=lambda item: str(
+            _pick(item[1], "generated_at", "run.generated_at") or ""))
+        split = _pick(newest, "run.split", "split")
+
+    dropped = {}
+
+    for summary_path, summary in found:
+        run_split = _pick(summary, "run.split", "split")
+        if run_split != split:
+            dropped[str(run_split)] = dropped.get(str(run_split), 0) + 1
+            continue
 
         run_dir = os.path.dirname(summary_path)
         method = _pick(summary, "run.method", "method") or os.path.basename(run_dir)
@@ -253,7 +300,11 @@ def load_runs(results_dir: str):
                      if os.path.exists(per_class_path) else _per_class_from_summary(summary))
 
         metrics = {name: _pick(summary, *paths) for name, paths in METRIC_PATHS.items()}
-        if metrics[SORT_METRIC] is None:
+
+        # A declined metric is a null under a key that IS there, so the schema
+        # is fine and there is nothing to reconcile.
+        if metrics[SORT_METRIC] is None and not any(
+                _path_present(summary, path) for path in METRIC_PATHS[SORT_METRIC]):
             _warn_schema(method, summary_path, summary)
 
         by_range = _pick(summary, "metrics_3d.miou_by_range", "overall.miou_3d_by_range") or {}
@@ -264,6 +315,11 @@ def load_runs(results_dir: str):
             "by_range": by_range,
             "per_class": per_class,
         }
+
+    if dropped:
+        detail = ", ".join(f"{count} from {name}" for name, count in sorted(dropped.items()))
+        print(f"report: reporting split {split!r}, ignored {detail}. "
+              f"Pass --split to choose a different one.", file=sys.stderr)
 
     return runs
 
@@ -737,9 +793,11 @@ def main(argv=None):
                         help="directory holding scored run subdirectories")
     parser.add_argument("--out", help="output HTML (default: <results>/report.html)")
     parser.add_argument("--title", default=DEFAULT_TITLE)
+    parser.add_argument("--split", help="report on this split only; default is the "
+                                        "most recently generated run's split")
     args = parser.parse_args(argv)
 
-    runs = load_runs(args.results)
+    runs = load_runs(args.results, split=args.split)
     if not runs:
         print(f"report: no scored runs found under {args.results}")
         return 1
