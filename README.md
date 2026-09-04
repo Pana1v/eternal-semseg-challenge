@@ -146,6 +146,46 @@ not appear in this frame at all, and is 1 point in 3,332 across the whole
 split. Those two facts shape every metric decision in
 [`docs/CHALLENGE.md`](docs/CHALLENGE.md).
 
+### Measured on it
+
+40 frames of that split, no extrinsic supplied, identical frame set across arms:
+
+| arm | 2D mIoU | 3D mIoU | classes in the 3D mean | consistency |
+| --- | --- | --- | --- | --- |
+| `bl_prior` | 0.0420 over 9 | 0.0338 | 9 of 9 | declined |
+| `bl_cam2d` | 0.2834 over 7 | declined | | declined |
+| `bl_geom3d` | declined | **0.1902** | 8 of 9 | declined |
+| `bl_paint` | refuses to run | | | |
+
+`bl_geom3d` is the arm that still works with no calibration, by design: nothing
+in its 3D path reads the extrinsic. Folded to the published 8-class space it is
+also 0.1902, and the PTv3 model the dataset authors report scores 0.8096 there.
+That gap is the invitation.
+
+Three things in that table are worth more than the numbers.
+
+`bl_cam2d` scores 1.0000 on the fixture and 0.2834 here, which is the empirical
+version of a warning this repo could previously only argue for: a perfect
+fixture score measures the fixture. Its per-class detail is the real result,
+`sky` at 0.7445 and `vegetation` at 0.4481 against `artificial_structures` and
+`obstacle` at exactly 0.0000. An appearance-only model learns what colour
+separates and learns nothing about the two classes a robot most needs.
+
+And the two 2D means are not over the same classes, because `vehicle` and
+`human` are in none of the 40 frames. `bl_prior` predicts them anyway and eats a
+0.0 for each; `bl_cam2d` stays silent and they drop out as nan. On the matched
+7-class basis chance is 0.0540, so the camera arm's real margin is 5.25x rather
+than the 6.7x a careless reading of the table gives.
+And the lidar arm scores exactly **0.0000** on `human`, `vehicle` and `other`,
+while its 9-class mean reads 0.1902 and its frequency-weighted IoU reads 0.4703.
+It learns `vegetation` at 0.5834 and `natural_ground` at 0.4572, the two classes
+that dominate the split, and nothing at all about anything rare or small. Every
+averaged number here looks respectable while the model cannot see a person.
+
+[`docs/CHALLENGE.md`](docs/CHALLENGE.md) works through all three, including why
+the range bins rise with distance and why that is a class-support artefact
+rather than a claim about the sensor.
+
 ## The design decision that makes the ablation mean anything
 
 The problem statement demands a lidar-only versus camera-only versus fused

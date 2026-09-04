@@ -400,6 +400,143 @@ exactness by construction is the whole point. It is **not** a difficulty
 benchmark, and its 2D task in particular is degenerate for an appearance-based
 method. Difficulty claims belong to the real GOOSE numbers.
 
+### The same arms on real GOOSE, which is where difficulty claims belong
+
+40 frames of GOOSE val, taken as the first 40 of the md5-stable score split, no
+`--calib` and therefore no extrinsic. The frame set is byte identical across
+arms (`frame_ids` md5 `aba049dc4ae3`), so these rows are a valid side by side
+comparison and not three different subsets.
+
+| arm | 2D mIoU | 3D mIoU | classes in the 3D mean | frustum split | consistency |
+| --- | --- | --- | --- | --- | --- |
+| `bl_prior` | 0.0420 over 9 | 0.0338 | 9 of 9 | declined | declined |
+| `bl_cam2d` | 0.2834 over 7 | declined | | declined | declined |
+| `bl_geom3d` | declined | **0.1902** | 8 of 9 | declined | declined |
+| `bl_paint` | refuses to run | | | | |
+
+`bl_geom3d` is the arm that still produces a real answer here, which is the
+whole reason it exists: no step of its 3D path touches the extrinsic. Its 2D
+half is declined because that half *is* a projection of its 3D labels. Against a
+uniform chance floor of 0.0381 the margin is 0.1521, about 5x. Compute is
+11.35 s/frame at 1518 MB peak, which is graded and is not free.
+
+Folded to the published 8-class space it is also 0.1902, identical to four
+decimals, because `sky` has zero lidar points and this arm never predicts it, so
+folding sky into `other` moves nothing. Set that against the **0.8096** that a
+PTv3 model reports on the full split in the same folded space (published by the
+dataset authors, not measured here) and the headroom is the point: the shipped
+lidar arm is a hand-crafted-feature Naive Bayes and there is a great deal left
+to win.
+
+Read "declined" as the harness refusing to compute a number, not as a zero. With
+no extrinsic there is no projection, so the frustum split and the consistency
+counts are genuinely unanswerable and `bl_cam2d` has no way to label a point at
+all. `bl_paint` refuses outright rather than falling back to geometry, because a
+submission labelled `bl_paint` that contained no fusion would be the most
+misleading artefact this repo could produce.
+
+#### The fixture's perfect 2D score does not transfer
+
+`bl_cam2d` scores 1.0000 on the fixture and **0.2834** here. That is the
+measurement. The interpretation offered above, that the fixture's colour to
+class map is very nearly a lookup table, is consistent with it but is not the
+only difference between the two runs: the image content, the fit set and the
+frame count all differ too. The honest statement is the narrow one. A perfect
+score on the fixture predicts nothing about real data, and now there is a number
+rather than an argument behind that sentence.
+
+#### The two 2D means are not over the same classes
+
+`vehicle` and `human` appear in exactly zero of the 40 frames' 2D ground truth.
+Under the nan-not-zero convention that lands differently on the two arms, and
+the asymmetry is worth understanding because it will land on candidate
+submissions the same way:
+
+- `bl_prior` samples from the class prior, so it *predicts* both absent classes.
+  Union is non-empty, intersection is empty, IoU is a hard 0.0, and that 0.0
+  stays in the mean. Its mean is over 9 classes.
+- `bl_cam2d` never predicts either one, so ground truth and prediction are both
+  empty, IoU is nan, and the class drops out. Its mean is over 7.
+
+So the convention penalises predicting a class that is not there and rewards
+staying silent about it. That is the correct behaviour, and it means 0.0420
+against 0.2834 is not a ratio. On the matched 7-class basis the chance floor is
+**0.0540** and `bl_cam2d` is **0.2834**, a margin of 5.25x over chance. Quote
+that one when comparing arms, and always say how many classes a mean covers.
+
+#### What the camera arm actually learned
+
+The mean hides the shape of the result, which is the whole reason this repo
+reports every per-class IoU:
+
+| class | 2D IoU |
+| --- | --- |
+| `sky` | 0.7445 |
+| `other` | 0.4549 |
+| `vegetation` | 0.4481 |
+| `natural_ground` | 0.1760 |
+| `artificial_ground` | 0.1604 |
+| `artificial_structures` | 0.0000 |
+| `obstacle` | 0.0000 |
+
+A diagonal Gaussian Naive Bayes over colour, row and column learns the three
+things that are separable by colour and image position, and learns literally
+nothing about structures or obstacles. Those are the two classes where an error
+matters most for a robot, and they are the two the appearance-only arm fails
+completely. A single 0.2834 conceals that; the per-class table is the finding.
+
+#### What the lidar arm actually learned, and where it scores zero
+
+| class | 3D IoU | share of the split |
+| --- | --- | --- |
+| `vegetation` | 0.5834 | 61.75 percent |
+| `natural_ground` | 0.4572 | |
+| `artificial_structures` | 0.2798 | |
+| `artificial_ground` | 0.1730 | |
+| `obstacle` | 0.0284 | |
+| `other` | 0.0000 | |
+| `vehicle` | 0.0000 | |
+| `human` | 0.0000 | 0.030 percent |
+| `sky` | nan | 0 points |
+
+Three classes score exactly zero and a fourth is 0.0284. The arm learns the two
+classes that dominate the split and the one with distinctive vertical structure,
+and learns nothing whatsoever about anything rare or small.
+
+This is the mIoU warning from the README with a number attached. `human` IoU is
+**0.0000**, and the unweighted 9-class mean still reads 0.1902, which does not
+look like a model that cannot see people at all. `fwIoU`, which weights by class
+frequency, reads 0.4703 and looks better still. Any single number that averages
+over classes will do this. The per-class column is not an appendix to the score,
+it is the score.
+
+#### The range bins are not comparable to each other
+
+Range stratification exists so that a model which is excellent up close and
+useless at distance cannot hide behind one mean. It works, but reading the bins
+against each other introduces a second problem, and this run demonstrates it:
+
+| bin | 3D mIoU | points | classes in that bin's ground truth |
+| --- | --- | --- | --- |
+| 0-5 m | 0.130 | 612,393 | 5 |
+| 5-15 m | 0.222 | 1,986,296 | 6 |
+| 15-30 m | 0.178 | 1,974,283 | 8 |
+| 30 m+ | 0.227 | 2,265,253 | 7 |
+
+The curve rises with range, which would be a surprising claim about a sensor
+whose angular resolution falls off as one over distance. It is largely not a
+claim about the sensor. Each bin's mIoU is a mean over a different set of
+classes, from 5 to 8 of them, because the near field simply does not contain
+`vehicle`, `human` or `artificial_structures` in these 40 frames while the mid
+field contains all eight. The 15-30 m bin is the only one holding `human`, and
+`human` scores zero, which is part of why that bin dips.
+
+So compare a bin against the same bin for another method, never against the
+neighbouring bin for the same method. The same caution applies to every
+partitioned mean in this repo, the frustum split included: partitions with
+different class support produce means that are individually correct and
+mutually incomparable.
+
 ### The crossover, which is the headline
 
 Decalibration sweep over `bl_paint` against `bl_geom3d`, whose 3D mIoU is flat
