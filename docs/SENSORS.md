@@ -99,6 +99,11 @@ Supply a calibration with `--calib` and the right-hand column's experiments
 open up on real data. Until then the projection-dependent results in this repo
 come from the fixture, and every place they are reported says so.
 
+The `yes` rows above are measured, not asserted: `bl_geom3d` scores 0.1902 3D
+mIoU and `bl_cam2d` 0.2834 2D mIoU on 40 val frames with no calibration at all.
+Those numbers, and the three ways they mislead if read carelessly, are in
+[`CHALLENGE.md`](CHALLENGE.md#the-same-arms-on-real-goose-which-is-where-difficulty-claims-belong).
+
 ## The synthetic rig: the fixture
 
 `semseg/datasets/fixture.py` generates a scene from primitives that each carry
