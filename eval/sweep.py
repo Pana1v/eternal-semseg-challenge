@@ -83,7 +83,7 @@ import numpy as np  # noqa: E402
 from baselines.common import base, runner  # noqa: E402
 from eval.metrics import consistency, coverage, miou  # noqa: E402
 from eval.plot_results import COLOR_3D, COLOR_REFERENCE, DPI, FIG_WIDE  # noqa: E402
-from semseg.datasets import Dataset, split_frames  # noqa: E402
+from semseg.datasets import Dataset  # noqa: E402
 from semseg.deskew import deskew, se3_exp  # noqa: E402
 from semseg.projection import AXIS_RANDOM, perturb_extrinsic  # noqa: E402
 
@@ -1079,7 +1079,7 @@ def _refusal(dataset, sweep: str):
     variables of the headline sweep, so a made-up value would not be a small
     error, it would be the entire result.
     """
-    if not getattr(dataset, "calib_available", True):
+    if not runner.has_calibration(dataset):
         return NO_CALIB_MESSAGE
 
     if sweep in SWEEPS_NEEDING_POSES and not getattr(dataset, "poses_available", True):
@@ -1098,12 +1098,9 @@ def main(argv=None):
         print(f"eval/sweep.py --sweep {args.sweep}: {refusal}", file=sys.stderr)
         return REFUSED_EXIT
 
-    fit_ids, score_ids = split_frames(dataset.frame_ids())
-
     # --split names the split to SWEEP over, so the other one is fitted on.
-    # Swapped here rather than inside run_row, matching bl_geom3d/run.py.
-    if args.split == "fit":
-        fit_ids, score_ids = score_ids, fit_ids
+    # Resolved here rather than inside run_row, which is called once per row.
+    fit_ids, score_ids = runner.resolve_splits(dataset, args.split)
 
     specs = _build_grid(args)
     n_frames = len(score_ids[:args.limit] if args.limit else score_ids)

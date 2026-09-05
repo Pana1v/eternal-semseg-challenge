@@ -14,26 +14,6 @@ import argparse
 
 from baselines.bl_cam2d.baseline import Cam2dBaseline
 from baselines.common import runner
-from semseg.datasets import split_frames
-
-
-def pick_extrinsic_fn(dataset):
-    """-> the extrinsic_fn runner.run wants, or the declining one.
-
-    GOOSE ships no calibration in its val zips, so GooseDataset.extrinsic
-    raises unless --calib supplied one (spec 13.3). Asking the adapter first,
-    rather than catching the raise, keeps the raise meaning what it says.
-
-    The default of True is for the fixture, whose extrinsic is exact by
-    construction and which therefore carries no such flag. Getting this wrong
-    in the safe direction is cheap: bl_cam2d's 2D half needs no extrinsic at
-    all, so a run without one still produces the arm's headline number and
-    declines only the 3D resample.
-    """
-    if getattr(dataset, "calib_available", True):
-        return runner.make_extrinsic_fn(dataset)
-
-    return runner.no_extrinsic
 
 
 def main():
@@ -42,16 +22,13 @@ def main():
     args = parser.parse_args()
 
     dataset = runner.build_dataset(args)
-    fit_ids, score_ids = split_frames(dataset.frame_ids())
+    fit_ids, score_ids = runner.resolve_splits(dataset, args.split)
 
-    # --split names the split to PREDICT over, so predicting the fit split
-    # means fitting on the score split. Swapping rather than reusing one split
-    # for both is what keeps runner.run's disjointness check satisfiable:
-    # nothing is ever fitted on the split it is scored on (spec section 9).
-    if args.split == "fit":
-        fit_ids, score_ids = score_ids, fit_ids
-
-    runner.run(Cam2dBaseline(), dataset, fit_ids, score_ids, pick_extrinsic_fn(dataset),
+    # Running without an extrinsic is cheap for this arm: its 2D half needs
+    # none at all, so the headline number survives and only the 3D resample is
+    # declined (spec 13.3).
+    runner.run(Cam2dBaseline(), dataset, fit_ids, score_ids,
+               runner.resolve_extrinsic_fn(dataset),
                args.out, limit=args.limit, jobs=args.jobs, split=args.split)
 
 

@@ -19,29 +19,16 @@ import argparse
 
 from baselines.bl_geom3d.baseline import Geom3dBaseline
 from baselines.common import runner
-from semseg.datasets import split_frames
 
-
-def resolve_extrinsic_fn(dataset):
-    """-> the extrinsic_fn runner.run wants, and a note for the operator.
-
-    This arm is the one that still produces a real 3D answer on a dataset with
-    no calibration, which is the actual state of the GOOSE val zips (interface
-    spec 13.3). So the no-calib case is a supported run and not an error, and
-    it must be announced rather than absorbed: the 2D half of the result is
-    then declined, so a reader who sees an empty 2D matrix should have been
-    told why.
-
-    The fixture has an exact extrinsic by construction and therefore does not
-    carry the flag at all, hence the default.
-    """
-    if getattr(dataset, "calib_available", True):
-        return runner.make_extrinsic_fn(dataset), None
-
-    return runner.no_extrinsic, (
-        "no calibration: this dataset ships no T_cam_lidar and none was given with --calib, "
-        "so the 3D output is unaffected and the 2D output is declined as UNLABELED. "
-        "The numbers are in the GOOSE-DB bags' /tf_static, not in the annotated zips.")
+# This arm is the one that still produces a real 3D answer on a dataset with no
+# calibration, which is the actual state of the GOOSE val zips (interface spec
+# 13.3). So the no-calib case is a supported run and not an error, and it must
+# be announced rather than absorbed: the 2D half of the result is then
+# declined, so a reader who sees an empty 2D matrix should have been told why.
+NO_CALIB_NOTE = (
+    "no calibration: this dataset ships no T_cam_lidar and none was given with --calib, "
+    "so the 3D output is unaffected and the 2D output is declined as UNLABELED. "
+    "The numbers are in the GOOSE-DB bags' /tf_static, not in the annotated zips.")
 
 
 def main(argv=None):
@@ -50,19 +37,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     dataset = runner.build_dataset(args)
-    fit_ids, score_ids = split_frames(dataset.frame_ids())
+    fit_ids, score_ids = runner.resolve_splits(dataset, args.split)
 
-    # --split names the split to PREDICT over, so the other one is what gets
-    # fitted. Swapping here rather than in runner.run keeps the driver's
-    # arguments literal: it fits on the first list and scores the second.
-    if args.split == "fit":
-        fit_ids, score_ids = score_ids, fit_ids
+    if not runner.has_calibration(dataset):
+        print(f"{Geom3dBaseline.name}: {NO_CALIB_NOTE}")
 
-    extrinsic_fn, note = resolve_extrinsic_fn(dataset)
-    if note:
-        print(f"{Geom3dBaseline.name}: {note}")
-
-    runner.run(Geom3dBaseline(), dataset, fit_ids, score_ids, extrinsic_fn, args.out,
+    runner.run(Geom3dBaseline(), dataset, fit_ids, score_ids,
+               runner.resolve_extrinsic_fn(dataset), args.out,
                limit=args.limit, jobs=args.jobs, split=args.split)
 
 

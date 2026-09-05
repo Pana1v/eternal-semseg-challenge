@@ -25,7 +25,6 @@ import argparse
 
 from baselines.bl_prior.baseline import DEFAULT_MODE, MODE_NAMES, PriorBaseline
 from baselines.common import runner
-from semseg.datasets import split_frames
 
 
 def main(argv=None):
@@ -45,8 +44,9 @@ def main(argv=None):
     # together and a seed spread reported from it is a spread over both.
     baseline = PriorBaseline(mode=args.mode, seed=args.seed)
 
-    fit_ids, score_ids = split_frames(dataset.frame_ids())
-    predict_ids = fit_ids if args.split == "fit" else score_ids
+    # The second list is whichever split --split named, which is the one to
+    # predict over. The first is discarded: see the empty fit split below.
+    _, predict_ids = runner.resolve_splits(dataset, args.split)
 
     # An empty fit split, not the real one. Nothing here is fitted, so handing
     # over fit_ids would call the inherited no-op fit() for no reason, and on
@@ -64,11 +64,8 @@ def main(argv=None):
     # reading mIoU on a 9-class problem cannot survive without. So it follows
     # the same rule as bl_geom3d and bl_cam2d and declines its
     # projection-dependent output instead of refusing to run.
-    extrinsic_fn = (runner.make_extrinsic_fn(dataset)
-                    if getattr(dataset, "calib_available", True)
-                    else runner.no_extrinsic)
-
-    return runner.run(baseline, dataset, [], predict_ids, extrinsic_fn, args.out,
+    return runner.run(baseline, dataset, [], predict_ids,
+                      runner.resolve_extrinsic_fn(dataset), args.out,
                       limit=args.limit, jobs=args.jobs, split=args.split)
 
 
