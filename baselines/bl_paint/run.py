@@ -40,7 +40,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from baselines.bl_paint.baseline import PaintBaseline          # noqa: E402
 from baselines.common import runner                            # noqa: E402
-from semseg.datasets import split_frames                       # noqa: E402
 
 # Distinct from 1 so a script driving several baselines can tell "this arm is
 # not runnable on this dataset" apart from "this arm crashed".
@@ -55,20 +54,6 @@ NO_CALIB_MESSAGE = (
     "labelled bl_paint and would contain no fusion.")
 
 
-def _splits(dataset, split: str):
-    """-> (fit_ids, score_ids) with score_ids being the split named on the CLI.
-
-    The stable-hash split of spec section 9 assigns each frame one side, and
-    `--split fit` means "predict over the fit side", so the two lists swap
-    rather than one being recomputed with a different fraction.
-    """
-    fit_ids, score_ids = split_frames(dataset.frame_ids())
-    if split == "fit":
-        return score_ids, fit_ids
-
-    return fit_ids, score_ids
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="bl_paint: geometry features plus painted RGB, the naive early-fusion floor")
@@ -77,13 +62,11 @@ def main(argv=None):
 
     dataset = runner.build_dataset(args)
 
-    # getattr, because only the GOOSE adapter has a calibration that can be
-    # missing. The fixture's extrinsic is exact by construction.
-    if not getattr(dataset, "calib_available", True):
+    if not runner.has_calibration(dataset):
         print(NO_CALIB_MESSAGE, file=sys.stderr)
         return NO_CALIB_EXIT
 
-    fit_ids, score_ids = _splits(dataset, args.split)
+    fit_ids, score_ids = runner.resolve_splits(dataset, args.split)
 
     payload = runner.run(PaintBaseline(seed=args.seed), dataset, fit_ids, score_ids,
                          runner.make_extrinsic_fn(dataset), args.out,

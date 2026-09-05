@@ -47,11 +47,9 @@ SIZE_LEAD = 8.0
 SIZE_HEAD = 8.6
 SIZE_BODY = 7.8
 SIZE_MONO = 7.0
-SIZE_META = 7.6
 LEAD_BODY = 10.2
 LEAD_MONO = 9.6
 GAP_SECTION = 7.0
-GAP_PARA = 3.2
 
 FONT_DIRS = (
     "/home/pan-navigator/workspaces/references/isaac-sim-dashboard/control-app/app/static/fonts",

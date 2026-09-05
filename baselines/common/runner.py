@@ -18,6 +18,7 @@ import sys
 import time
 
 from eval.io_formats import Accumulator, save_submission
+from semseg.datasets import split_frames
 
 # Serial by default. A worker pool is opt in, exactly as in the reference
 # repo: the pool costs a pickled Frame per result and only pays off on a full
@@ -257,6 +258,22 @@ def build_dataset(args):
                          crop_top=getattr(args, "crop_top", None))
 
 
+def resolve_splits(dataset, split: str):
+    """-> (fit_ids, score_ids), with score_ids being the split named on the CLI.
+
+    The stable-hash split of interface spec section 9 assigns each frame one
+    side, and `--split fit` means "predict over the fit side", so the two lists
+    swap rather than one being recomputed with a different fraction. Swapping
+    here rather than inside run() keeps that function's arguments literal: it
+    fits on the first list and scores the second.
+    """
+    fit_ids, score_ids = split_frames(dataset.frame_ids())
+    if split == "fit":
+        return score_ids, fit_ids
+
+    return fit_ids, score_ids
+
+
 def _from_dataset(frame_id, perturbed=True, *, dataset):
     return dataset.extrinsic(frame_id)
 
@@ -286,3 +303,26 @@ def make_extrinsic_fn(dataset):
     worker.
     """
     return functools.partial(_from_dataset, dataset=dataset)
+
+
+def has_calibration(dataset) -> bool:
+    """Whether this dataset can supply a T_cam_lidar at all.
+
+    Asking the adapter rather than catching Dataset.extrinsic's raise keeps
+    that raise meaning what it says. The default is True for the fixture,
+    whose extrinsic is exact by construction and which therefore carries no
+    such flag; only the GOOSE adapter has a calibration that can be missing.
+    """
+    return getattr(dataset, "calib_available", True)
+
+
+def resolve_extrinsic_fn(dataset):
+    """-> the extrinsic_fn run() wants, declining when there is no rig.
+
+    The choice lives here because getting it wrong is invisible: a fabricated
+    default extrinsic yields a full set of projection dependent numbers that
+    are all fiction. An arm that needs to ANNOUNCE the declining case asks
+    has_calibration separately, so the wording stays in the arm whose output
+    it describes.
+    """
+    return make_extrinsic_fn(dataset) if has_calibration(dataset) else no_extrinsic
